@@ -1,0 +1,14 @@
+# Root ignores
+.DS_Store
+*.log
+
+# Python
+venv/
+__pycache__/
+*.pyc
+backend/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env
