@@ -77,6 +77,11 @@ POSTGRES_DB=chatbot
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 
+# Choose one provider (OpenAI preferred)
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_API_KEY=YOUR_OPENAI_KEY
+
+# or Gemini
 GEMINI_MODEL=gemini-2.5-pro
 GEMINI_API_KEY=YOUR_GOOGLE_AI_STUDIO_KEY
 

@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional, Tuple, List
 import logging
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, LOG_LLM_DEBUG
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, LOG_LLM_DEBUG, OPENAI_API_KEY, OPENAI_MODEL
+import time
 
 
 class DialogChain:
@@ -47,7 +48,19 @@ class DialogChain:
             # Lazy import to avoid hard dependency when no key present
             from langchain.prompts import ChatPromptTemplate
             from langchain_core.output_parsers import JsonOutputParser
-            from langchain_google_genai import ChatGoogleGenerativeAI
+            llm = None
+            provider = ""
+            try:
+                if OPENAI_API_KEY:
+                    from langchain_openai import ChatOpenAI
+                    llm = ChatOpenAI(model=OPENAI_MODEL or "gpt-4o-mini", api_key=OPENAI_API_KEY, temperature=0.3)
+                    provider = "openai"
+                elif GEMINI_API_KEY:
+                    from langchain_google_genai import ChatGoogleGenerativeAI
+                    llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL or "gemini-1.5-pro", api_key=GEMINI_API_KEY, temperature=0.3)
+                    provider = "gemini"
+            except Exception:
+                llm = None
             from pydantic import BaseModel
 
             class DialogOut(BaseModel):
@@ -55,7 +68,6 @@ class DialogChain:
                 next_question_id: Optional[str] = None
                 quick_replies: Optional[List[str]] = None
 
-            model = ChatGoogleGenerativeAI(model=GEMINI_MODEL or "gemini-1.5-pro", api_key=GEMINI_API_KEY, temperature=0.3)
             parser = JsonOutputParser(pydantic_object=DialogOut)
             prompt = ChatPromptTemplate.from_messages([
                 (
@@ -77,11 +89,16 @@ class DialogChain:
             ])
             if LOG_LLM_DEBUG:
                 try:
-                    key_tail = GEMINI_API_KEY[-10:] if GEMINI_API_KEY else ""
-                    DialogChain._logger.info("**API key being used:** %s (model=%s)", key_tail, GEMINI_MODEL or "gemini-1.5-pro")
+                    if provider == "openai":
+                        DialogChain._logger.info("Using OpenAI model=%s", OPENAI_MODEL)
+                    elif provider == "gemini":
+                        key_tail = GEMINI_API_KEY[-10:] if GEMINI_API_KEY else ""
+                        DialogChain._logger.info("Using Gemini model=%s key_tail=%s", GEMINI_MODEL or "gemini-1.5-pro", key_tail)
                 except Exception:
                     pass
-            chain = prompt | model | parser
+            if llm is None:
+                return None
+            chain = prompt | llm | parser
             for _ in range(3):
                 payload = {
                     "profile_json": profile,
@@ -91,7 +108,9 @@ class DialogChain:
                 if LOG_LLM_DEBUG:
                     DialogChain._logger.info("Dialog LLM prompt payload=%s", payload)
                 try:
+                    t0 = time.perf_counter()
                     out = chain.invoke(payload)
+                    duration_ms = (time.perf_counter() - t0) * 1000.0
                     # Handle both dict (JsonOutputParser) and pydantic model objects
                     if isinstance(out, dict):
                         bot_message = out.get("bot_message")
@@ -111,10 +130,11 @@ class DialogChain:
                         except Exception:
                             DialogChain._logger.info("Dialog LLM raw output (repr)=%r", out)
                     if LOG_LLM_DEBUG:
-                        DialogChain._logger.info("Dialog LLM success: next=%s quick=%s", next_question_id, quick_replies[:3])
+                        DialogChain._logger.info("Dialog LLM success in %.1f ms: next=%s quick=%s", duration_ms, next_question_id, quick_replies[:3])
                     return bot_message, next_question_id, quick_replies
                 except Exception as e:
-                    DialogChain._logger.warning("Dialog LLM error; falling back", exc_info=True)
+                    if LOG_LLM_DEBUG:
+                        DialogChain._logger.warning("Dialog LLM error; falling back", exc_info=True)
             DialogChain._logger.info("Dialog LLM failed after retries; falling back")
             return None
         except Exception:

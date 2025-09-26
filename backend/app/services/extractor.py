@@ -1,10 +1,11 @@
 from typing import Any, Dict, Tuple, Optional, List
 import logging
 from pydantic import BaseModel, Field, EmailStr
-from app.config import GEMINI_API_KEY, GEMINI_MODEL
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, OPENAI_API_KEY, OPENAI_MODEL
 from app.utils.validators import normalize_phone
 from app.config import LOG_LLM_DEBUG, GEMINI_MODEL, GEMINI_API_KEY
 import json
+import time
 
 
 class EnglishTestRecord(BaseModel):
@@ -52,9 +53,16 @@ def _build_llm_chain():
             return None, None, None
         from langchain.prompts import ChatPromptTemplate
         from langchain_core.output_parsers import JsonOutputParser
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        model = ChatGoogleGenerativeAI(model=GEMINI_MODEL, api_key=GEMINI_API_KEY, temperature=0)
+        model = None
+        try:
+            if OPENAI_API_KEY:
+                from langchain_openai import ChatOpenAI
+                model = ChatOpenAI(model=OPENAI_MODEL or "gpt-4o-mini", api_key=OPENAI_API_KEY, temperature=0)
+            elif GEMINI_API_KEY:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                model = ChatGoogleGenerativeAI(model=GEMINI_MODEL, api_key=GEMINI_API_KEY, temperature=0)
+        except Exception:
+            model = None
         parser = JsonOutputParser(pydantic_object=IntakeFields)
         prompt = ChatPromptTemplate.from_messages([
             (
@@ -106,8 +114,11 @@ def _build_llm_chain():
         if LOG_LLM_DEBUG:
             try:
                 from logging import getLogger
-                key_tail = GEMINI_API_KEY[-10:] if GEMINI_API_KEY else ""
-                getLogger(__name__).info("**API key being used:** %s (model=%s)", key_tail, GEMINI_MODEL)
+                if OPENAI_API_KEY:
+                    getLogger(__name__).info("Using OpenAI model=%s", OPENAI_MODEL)
+                elif GEMINI_API_KEY:
+                    key_tail = GEMINI_API_KEY[-10:] if GEMINI_API_KEY else ""
+                    getLogger(__name__).info("Using Gemini model=%s key_tail=%s", GEMINI_MODEL, key_tail)
             except Exception:
                 pass
         return prompt, model, parser
@@ -269,7 +280,9 @@ class ExtractorChain:
                     }
                     if LOG_LLM_DEBUG:
                         cls._logger.info("Extractor LLM prompt payload=%s", payload)
+                    t0 = time.perf_counter()
                     result = chain.invoke(payload)
+                    duration_ms = (time.perf_counter() - t0) * 1000.0
                     # Accept both dict and pydantic model
                     if isinstance(result, dict):
                         data = {k: v for k, v in result.items() if v is not None}
@@ -282,7 +295,7 @@ class ExtractorChain:
                     if "phone" in data and data["phone"]:
                         normalized = normalize_phone(data["phone"]) or data["phone"]
                         data["phone"] = normalized
-                    cls._logger.info("Extractor LLM success: fields=%s", list(data.keys()))
+                    cls._logger.info("Extractor LLM success in %.1f ms: fields=%s", duration_ms, list(data.keys()))
                     if expected_field:
                         if expected_field in data and data[expected_field] is not None:
                             return data, profile
