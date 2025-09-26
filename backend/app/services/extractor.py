@@ -19,17 +19,31 @@ class FinancialInfo(BaseModel):
 
 
 class IntakeFields(BaseModel):
+    # Profile basics
     full_name: Optional[str] = None
     age: Optional[int] = None
-    academic_level: Optional[str] = None
-    recent_grades: Optional[str] = None
-    field_of_study: Optional[str] = None
-    preferred_countries: Optional[List[str]] = None
-    english_tests: Optional[List[EnglishTestRecord]] = None
-    financial: Optional[FinancialInfo] = None
-    career_goals: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
+
+    # Academics (normalized)
+    academic_level: Optional[str] = None  # e.g., "Bachelor's", "Master's"
+    recent_grades: Optional[str] = None   # free-form like "CGPA: 3.18"
+    institution: Optional[str] = None     # e.g., "UMT"
+    year_completed: Optional[int] = None  # e.g., 2025
+    major: Optional[str] = None           # e.g., "Artificial Intelligence"
+
+    # Preferences (normalized)
+    field_of_study: Optional[str] = None
+    preferred_countries: Optional[List[str]] = None  # canonical country names
+    target_level: Optional[str] = None
+    english_tests: Optional[List[EnglishTestRecord]] = None
+    financial: Optional[FinancialInfo] = None
+    budget_min: Optional[int] = None
+    budget_max: Optional[int] = None
+    career_goals: Optional[str] = None
+
+    # Meta: which fields are confidently completed by this turn
+    completed_fields: Optional[List[str]] = None
 
 
 def _build_llm_chain():
@@ -46,35 +60,46 @@ def _build_llm_chain():
             (
                 "system",
                 "You are a precise educational intake assistant. "
-                "Extract ONLY the requested fields into ONE strict JSON object that matches the schema exactly.\n\n"
+                "Extract ONLY the requested fields into ONE strict JSON object that matches the schema exactly, already normalized for database storage.\n\n"
                 "Rules:\n"
                 "- Always return ALL schema fields, even if null.\n"
                 "- If information is missing or not provided, set that field to null (not empty string/array).\n"
                 "- Reuse existing values from the provided profile when present, unless the new message clearly updates/contradicts them.\n"
                 "- Never invent or guess values.\n"
                 "- If multiple values appear for the same field, keep the most recent/clearly stated one.\n"
-                "- Dates must be ISO (YYYY-MM-DD). If only a year is given, use 'YYYY-01-01'.\n"
-                "- Resolve relative time: 'this year' = 2025, 'last year' = 2024.\n"
+                "- Normalize synonyms and formats: BS/BSc → \"Bachelor's\"; canonicalize country names (e.g., UK→United Kingdom).\n"
+                "- Do NOT infer field_of_study from degree/program mentioned (e.g., 'BS in AI'). Only set field_of_study if the student explicitly states their interest.\n"
+                "- If the message says 'this year' or relative time, resolve to the correct numeric year using the current year (from system_time). Example: if system_time is 2025-09..., 'this year' = 2025, 'last year' = 2024.\n"
+                "- For budget text like '10k - 20k', output numeric budget_min=10000 and budget_max=20000 (currency-agnostic).\n"
+                "- For English tests, include an item with test_name and overall_score if stated.\n"
                 "- Do NOT include extra keys or any text outside JSON.\n"
                 "- Output strictly valid JSON only (no markdown).\n\n"
                 "Schema fields (exact keys and order):\n"
                 "full_name (string|null),\n"
                 "age (int|null),\n"
+                "email (string|null),\n"
+                "phone (string|null),\n"
                 "academic_level (string|null),\n"
                 "recent_grades (string|null),\n"
+                "institution (string|null),\n"
+                "year_completed (int|null),\n"
+                "major (string|null),\n"
                 "field_of_study (string|null),\n"
                 "preferred_countries (list[string]|null),\n"
+                "target_level (string|null),  # Do not copy current academic_level here; only set if the student explicitly states their intended study level.\n"
                 "english_tests (list[object]|null; object: test_name (string|null), overall_score (float|null), test_date (string|null ISO)),\n"
                 "financial (object|null; funding_type (string|null), budget_range (string|null)),\n"
+                "budget_min (int|null),\n"
+                "budget_max (int|null),\n"
                 "career_goals (string|null),\n"
-                "email (string|null),\n"
-                "phone (string|null)."
+                "completed_fields (list[string]|null)."
             ),
             (
                 "user",
                 "Current profile JSON (may already contain some fields):\n{profile_json}\n\n"
                 "Student message:\n{text}\n\n"
                 "If 'expected_field' is provided, focus on extracting that field primarily: {expected_field}.\n"
+                "system_time: provide the current year in any relative-year resolution.\n"
                 "Return ONLY one JSON object with exactly the schema keys (no extra keys), in the exact order listed."
             ),
         ])
@@ -235,10 +260,12 @@ class ExtractorChain:
             for attempt in range(3):
                 try:
                     chain = cls._prompt | cls._model | cls._parser
+                    from datetime import datetime
                     payload = {
                         "text": text,
                         "profile_json": profile,
                         "expected_field": expected_field or "",
+                        "system_time": datetime.utcnow().isoformat(),
                     }
                     if LOG_LLM_DEBUG:
                         cls._logger.info("Extractor LLM prompt payload=%s", payload)
@@ -251,7 +278,7 @@ class ExtractorChain:
 
                     if LOG_LLM_DEBUG:
                         cls._logger.debug(f"Extractor LLM raw output (Attempt {attempt+1}): {json.dumps(data, indent=2)}")
-                    # Normalize phone if present
+                    # Backend minimal post-processing: normalize phone only
                     if "phone" in data and data["phone"]:
                         normalized = normalize_phone(data["phone"]) or data["phone"]
                         data["phone"] = normalized

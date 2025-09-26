@@ -21,7 +21,13 @@ class DialogChain:
 
     @classmethod
     def _find_next_missing_field(cls, profile: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+        completed = set(profile.get("completed_fields") or [])
+        # If user already confirmed preferred field, don't re-ask
+        if profile.get("field_of_study"):
+            completed.add("field_of_study")
         for field_key, question in cls.BASIC_ORDER:
+            if field_key in completed:
+                continue
             value = profile.get(field_key)
             if value in (None, "") or (isinstance(value, list) and len(value) == 0) or (isinstance(value, dict) and len(value) == 0):
                 return field_key, question
@@ -59,6 +65,10 @@ class DialogChain:
                     "If key fields are missing, politely ask ONE next question. "
                     "Return strict JSON with fields: bot_message, next_question_id (or null), quick_replies (or null). "
                     "Use next_question_id like 'ask_age' or 'ask_field_of_study' matching these keys: full_name, age, academic_level, recent_grades, field_of_study, preferred_countries, english_tests, financial, career_goals, email, phone."
+                    "\nRules: "
+                    "- Do NOT infer field_of_study from the degree (e.g., BS in AI). Ask explicitly unless the user clearly states their interest. If degree and field look same, ask a confirmation question and present options (e.g., AI, Computer Science, Engineering, Business). "
+                    "- If user indicates 'not yet' for English tests, treat english_tests as completed for now and move forward to preferences or next missing field. "
+                    "- Avoid re-asking any field listed in profile.completed_fields. "
                 ),
                 (
                     "user",
@@ -94,8 +104,12 @@ class DialogChain:
 
                     if not bot_message:
                         raise ValueError("Dialog parser returned no bot_message")
-                    if LOG_LLM_DEBUG and out:
-                        DialogChain._logger.info("Dialog LLM raw output=%s", out.dict())
+                    if LOG_LLM_DEBUG and out is not None:
+                        try:
+                            raw_out = out if isinstance(out, dict) else out.dict()
+                            DialogChain._logger.info("Dialog LLM raw output=%s", raw_out)
+                        except Exception:
+                            DialogChain._logger.info("Dialog LLM raw output (repr)=%r", out)
                     if LOG_LLM_DEBUG:
                         DialogChain._logger.info("Dialog LLM success: next=%s quick=%s", next_question_id, quick_replies[:3])
                     return bot_message, next_question_id, quick_replies
