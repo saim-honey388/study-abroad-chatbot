@@ -2,7 +2,16 @@
 
 Craft your dream study‑abroad journey with an elegant, LLM‑powered intake assistant. Built as a modern mono‑repo with a production‑ready FastAPI backend and a polished React (Vite + Tailwind) frontend.
 
-![made-with-love](https://img.shields.io/badge/made%20with-❤️-ff477e) ![python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white) ![fastapi](https://img.shields.io/badge/FastAPI-0.111+-009688?logo=fastapi&logoColor=white) ![react](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=222) ![vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white) ![tailwind](https://img.shields.io/badge/Tailwind-4-38B2AC?logo=tailwindcss&logoColor=white) ![postgres](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white)
+<!-- Primary stack (larger) -->
+<p>
+  <img src="https://img.shields.io/badge/LangChain-0.2%2B-2E7D32?style=for-the-badge&logo=chainlink&logoColor=white" alt="LangChain" />
+  <img src="https://img.shields.io/badge/FastAPI-0.111%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/PostgreSQL-14%2B-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+</p>
+
+<!-- Secondary tools -->
+![made-with-love](https://img.shields.io/badge/made%20with-❤️-ff477e) ![react](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=222) ![vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white) ![tailwind](https://img.shields.io/badge/Tailwind-4-38B2AC?logo=tailwindcss&logoColor=white)
 
 ## Why this project?
 - LLM‑first data extraction: parse multi‑field user messages (country, budget, degree, major, GPA, year) in one go.
