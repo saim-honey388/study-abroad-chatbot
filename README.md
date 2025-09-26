@@ -12,10 +12,8 @@ Craft your dream study‑abroad journey with an elegant, LLM‑powered intake as
 - Thin backend: trusts the LLM output (types/constraints enforced), with rich debug logs to iterate fast.
 
 ## Screenshots
-> Replace with your own screenshots/gifs from `frontend` build
-
-![Start Card placeholder](https://placehold.co/1000x400?text=Start+Card)
-![Chat UI placeholder](https://placehold.co/1000x500?text=Chat+UI)
+![Start Card](frontend/public/screenshots/start-card.png)
+![Chat UI](frontend/public/screenshots/chat-ui.png)
 
 ## Architecture
 ```
