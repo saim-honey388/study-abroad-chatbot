@@ -1,15 +1,38 @@
-# Study Abroad Chatbot (Mono‑repo)
+# Study Abroad Chatbot
 
-LLM‑powered intake assistant for students planning to study abroad.
+Craft your dream study‑abroad journey with an elegant, LLM‑powered intake assistant. Built as a modern mono‑repo with a production‑ready FastAPI backend and a polished React (Vite + Tailwind) frontend.
 
-- Backend: FastAPI + SQLAlchemy + Alembic + LangChain (Gemini)
-- Frontend: React (Vite) + Tailwind CSS
+![made-with-love](https://img.shields.io/badge/made%20with-❤️-ff477e) ![python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white) ![fastapi](https://img.shields.io/badge/FastAPI-0.111+-009688?logo=fastapi&logoColor=white) ![react](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=222) ![vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white) ![tailwind](https://img.shields.io/badge/Tailwind-4-38B2AC?logo=tailwindcss&logoColor=white) ![postgres](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white)
+
+## Why this project?
+- LLM‑first data extraction: parse multi‑field user messages (country, budget, degree, major, GPA, year) in one go.
+- Natural, context‑aware dialog: don’t re‑ask completed fields; confirm only where needed.
+- Clean, normalized schema: student profiles, academic history (with major), English tests, preferences; Alembic migrations included.
+- Elegant UX: Start Card, responsive chat UI, quick replies, autoscroll/scroll‑to‑bottom, compact settings.
+- Thin backend: trusts the LLM output (types/constraints enforced), with rich debug logs to iterate fast.
+
+## Screenshots
+> Replace with your own screenshots/gifs from `frontend` build
+
+![Start Card placeholder](https://placehold.co/1000x400?text=Start+Card)
+![Chat UI placeholder](https://placehold.co/1000x500?text=Chat+UI)
+
+## Architecture
+```
+[ React (Vite + Tailwind) ]  →  [ FastAPI + LangChain (Gemini) ]  →  [ PostgreSQL ]
+         UI/UX                        LLM policy + extract             normalized schema
+```
+
+Key Services
+- `ExtractorChain`: Gemini‑driven JSON extraction and normalization (synonyms, levels, dates, budget ranges)
+- `DialogChain`: Gemini‑driven replies + next question policy with rule fallback
+- Alembic migrations; `tests/show_db.py` prints all data per session
 
 ## Live Dev Endpoints
 - Backend docs: `http://127.0.0.1:8000/docs`
 - Frontend dev: `http://127.0.0.1:5173`
 
-## Repo Layout
+## Repository Layout
 ```
 backend/   FastAPI service (REST API, DB models, services)
 frontend/  React UI (chat widget, Start Card, settings)
@@ -18,7 +41,7 @@ frontend/  React UI (chat widget, Start Card, settings)
 ## Quick Start
 
 ### Backend
-Requirements: Python 3.10+, PostgreSQL running locally
+Requirements: Python 3.10+, PostgreSQL
 
 1) Create venv & install deps
 ```bash
@@ -42,7 +65,7 @@ REDIS_URL=redis://localhost:6379/0
 LOG_LLM_DEBUG=true
 ```
 
-3) Run DB migrations
+3) Run migrations
 ```bash
 ../venv/bin/alembic upgrade head
 ```
@@ -59,25 +82,29 @@ cd frontend
 npm install
 npm run dev
 ```
-If backend is not `http://127.0.0.1:8000`, set `VITE_API_BASE` in `frontend/.env`.
+If backend isn’t `http://127.0.0.1:8000`, set `VITE_API_BASE` in `frontend/.env`.
 
-## Key Features
-- LLM‑first extraction and dialog policy with rule‑based fallbacks
-- Normalized Postgres schema (profiles, academic history, english tests, preferences)
-- Alembic migrations; `tests/show_db.py` to inspect data by session
-- Modern chat UI with Start Card, quick replies, scroll‑to‑bottom button
-- Detailed LLM logging toggle via `LOG_LLM_DEBUG`
+## API Overview
+- `GET /health` – health check
+- `POST /api/start` – start a session (name, email, phone)
+- `POST /api/message` – send/receive chat messages; persists extracted fields
+- `POST /api/upload-document` – upload files (e.g., transcripts)
+- `GET /api/debug/llm-key` – debug the currently loaded Gemini key suffix (when DEBUG)
 
-## Troubleshooting
-- Verify Gemini key at runtime: `GET /api/debug/llm-key`
-- Kill stale dev servers if ports are busy:
+## CLI Utilities
+Inspect your database by session:
 ```bash
-pkill -f "uvicorn app.main:app" || true
+PYTHONPATH=backend ../venv/bin/python backend/tests/show_db.py
 ```
 
-## Deployment Notes
-- Keep secrets out of the repo; use environment variables in prod
-- Serve frontend as static files (Vite build) and FastAPI behind HTTPS
+## Roadmap
+- Program recommendations based on preferences + country policies
+- Document parsing (OCR) and auto‑field extraction
+- Multi‑tenant admin dashboard
+- Docker + CI workflows
+
+## Contributing
+PRs welcome! Please open an issue to discuss significant changes first.
 
 ## License
 MIT
