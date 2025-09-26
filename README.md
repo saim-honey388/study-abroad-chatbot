@@ -2,24 +2,28 @@
 
 Craft your dream study‑abroad journey with an elegant, LLM‑powered intake assistant. Built as a modern mono‑repo with a production‑ready FastAPI backend and a polished React (Vite + Tailwind) frontend.
 
-<!-- Primary stack (larger, with LangChain logo) -->
-<p>
-  <a href="https://www.langchain.com/" title="LangChain">
-    <img src="https://avatars.githubusercontent.com/u/126733545?s=200&v=4" alt="LangChain" height="36" style="vertical-align:middle;border-radius:8px;margin-right:8px;" />
-  </a>
-  <a href="https://www.python.org/" title="Python">
-    <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
-  </a>
-  <a href="https://react.dev/" title="React">
-    <img src="https://img.shields.io/badge/React-18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
-  </a>
-  <a href="https://www.postgresql.org/" title="PostgreSQL">
-    <img src="https://img.shields.io/badge/PostgreSQL-14%2B-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  </a>
-</p>
+<!-- Primary stack (hero row) -->
+<div align="center" style="display:flex;gap:18px;align-items:center;justify-content:center;flex-wrap:wrap;margin:8px 0 2px 0;">
+  <a href="https://www.langchain.com/" title="LangChain"><img alt="LangChain" height="54" src="https://avatars.githubusercontent.com/u/126733545?s=200&v=4" style="border-radius:12px;box-shadow:0 6px 20px rgba(46,125,50,.25);"/></a>
+  <a href="https://www.python.org/" title="Python"><img alt="Python" height="54" src="https://cdn.simpleicons.org/python/3776AB/ffffff"/></a>
+  <a href="https://react.dev/" title="React"><img alt="React" height="54" src="https://cdn.simpleicons.org/react/61DAFB/20232A"/></a>
+  <a href="https://www.postgresql.org/" title="PostgreSQL"><img alt="PostgreSQL" height="54" src="https://cdn.simpleicons.org/postgresql/336791/ffffff"/></a>
+</div>
+
+<div align="center" style="margin-top:6px;">
+  <img src="https://img.shields.io/badge/LangChain-powered-2E7D32?style=for-the-badge&logo=chainlink&logoColor=white" alt="LangChain powered"/>
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/React-18-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React"/>
+  <img src="https://img.shields.io/badge/PostgreSQL-14%2B-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"/>
+</div>
 
 <!-- Secondary tools -->
-![made-with-love](https://img.shields.io/badge/made%20with-❤️-ff477e) ![fastapi](https://img.shields.io/badge/FastAPI-0.111%2B-009688?logo=fastapi&logoColor=white) ![vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white) ![tailwind](https://img.shields.io/badge/Tailwind-4-38B2AC?logo=tailwindcss&logoColor=white)
+<div align="center" style="margin-top:8px;">
+  <img src="https://img.shields.io/badge/FastAPI-0.111%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"/>
+  <img src="https://img.shields.io/badge/Vite-5-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite"/>
+  <img src="https://img.shields.io/badge/Tailwind-4-38B2AC?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind"/>
+  <img src="https://img.shields.io/badge/made%20with-❤️-ff477e?style=for-the-badge" alt="made with love"/>
+</div>
 
 ## Why this project?
 - LLM‑first data extraction: parse multi‑field user messages (country, budget, degree, major, GPA, year) in one go.
