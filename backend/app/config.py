@@ -35,10 +35,13 @@ else:
     POSTGRES_URL = None
 
 # LLM / Providers
+LLM_PROVIDER = (os.getenv("LLM_PROVIDER") or "").lower().strip()  # "openai" | "google" | "anthropic" | ""
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-2.5-pro")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = (os.getenv("OPENAI_MODEL") or "gpt-3.5-turbo-0125")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = (os.getenv("ANTHROPIC_MODEL") or "claude-3-5-sonnet-latest")
 
 # Weaviate / Vector DB
 WEAVIATE_URL = os.getenv("WEAVIATE_URL")

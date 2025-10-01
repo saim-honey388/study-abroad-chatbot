@@ -1,6 +1,19 @@
 import { useRef, useState, useEffect } from "react";
 import { startSession, sendMessage, uploadDocument } from "./api";
 
+/* 
+ * TEMPORARY TIMER FEATURE - REMOVE LATER
+ * 
+ * To remove this timer feature later, delete the following sections:
+ * 1. Timer state variables (lines ~29-33)
+ * 2. Timer cleanup useEffect (lines ~40-47) 
+ * 3. Timer functions startTimer/stopTimer (lines ~49-75)
+ * 4. Timer calls in onSend function (lines ~166-167, 181-182)
+ * 5. Timer widget in JSX (lines ~384-396)
+ * 
+ * Search for "TEMPORARY TIMER" to find all related code.
+ */
+
 function Dropdown({ open, anchorRight = false, children }) {
   if (!open) return null;
   return (
@@ -25,11 +38,52 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState("language");
   const [submenuTop, setSubmenuTop] = useState(0);
+  
+  // TEMPORARY TIMER STATE - REMOVE LATER
+  const [timerActive, setTimerActive] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerDisplay, setTimerDisplay] = useState("00:00:00");
+  const timerRef = useRef(null);
   const rootListRef = useRef(null);
   const fileRef = useRef(null);
   const listRef = useRef(null);
 
   const emojiList = ["😀","😁","😂","😊","😉","😍","🤩","👍","🙏","🎓","✈️","🇺🇸","🇬🇧","🇨🇦","🇦🇺"];
+
+  // TEMPORARY TIMER CLEANUP - REMOVE LATER
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  // TEMPORARY TIMER FUNCTIONS - REMOVE LATER
+  const startTimer = () => {
+    setTimerActive(true);
+    setTimerSeconds(0);
+    setTimerDisplay("00:00:00");
+    
+    timerRef.current = setInterval(() => {
+      setTimerSeconds(prev => {
+        const newSeconds = prev + 1;
+        const hours = Math.floor(newSeconds / 3600);
+        const minutes = Math.floor((newSeconds % 3600) / 60);
+        const seconds = newSeconds % 60;
+        setTimerDisplay(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+        return newSeconds;
+      });
+    }, 1000);
+  };
+
+  const stopTimer = () => {
+    setTimerActive(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
 
   const recalcSubmenuTop = () => {
     const list = rootListRef.current;
@@ -130,6 +184,10 @@ export default function App() {
     if (!sessionId) return;
     const text = (overrideText ?? input).trim();
     if (!text) return;
+    
+    // TEMPORARY TIMER - START TIMER WHEN USER SENDS MESSAGE
+    startTimer();
+    
     const userMsg = { sender: "user", text };
     pushMsg(userMsg);
     if (overrideText === undefined) setInput("");
@@ -142,6 +200,8 @@ export default function App() {
       pushMsg({ sender: "bot", text: "Sorry, something went wrong." });
     } finally {
       setLoading(false);
+      // TEMPORARY TIMER - STOP TIMER WHEN RESPONSE IS RECEIVED
+      stopTimer();
     }
   };
 
@@ -342,6 +402,21 @@ export default function App() {
                 </button>
               )}
             </div>
+            
+            {/* TEMPORARY TIMER WIDGET - REMOVE LATER */}
+            {timerActive && (
+              <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200">
+                <div className="flex items-center justify-center">
+                  <div className="bg-yellow-100 border border-yellow-300 rounded-lg px-4 py-2 flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-mono text-yellow-800">
+                      Response Time: {timerDisplay}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Input Bar Section */}
             <div className="px-4 py-3 border-t bg-white">
               <div className="flex items-center space-x-2 relative">

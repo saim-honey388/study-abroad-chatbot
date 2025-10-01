@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional, Tuple, List
 import logging
-from app.config import GEMINI_API_KEY, GEMINI_MODEL, LOG_LLM_DEBUG, OPENAI_API_KEY, OPENAI_MODEL
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, LOG_LLM_DEBUG, OPENAI_API_KEY, OPENAI_MODEL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, LLM_PROVIDER
 import time
 
 
@@ -36,7 +36,7 @@ class DialogChain:
 
     @staticmethod
     def _llm_chain_available() -> bool:
-        return bool(GEMINI_API_KEY)
+        return bool(OPENAI_API_KEY or GEMINI_API_KEY or ANTHROPIC_API_KEY)
 
     @classmethod
     def _llm_respond(
@@ -50,17 +50,51 @@ class DialogChain:
             from langchain_core.output_parsers import JsonOutputParser
             llm = None
             provider = ""
+            # Log what we're about to try
             try:
-                if OPENAI_API_KEY:
+                DialogChain._logger.info("LLM provider selection (dialog): openai_present=%s gemini_present=%s", bool(OPENAI_API_KEY), bool(GEMINI_API_KEY))
+            except Exception:
+                pass
+            try:
+                # Honor explicit provider if set; otherwise prefer OpenAI, then Google, then Anthropic
+                pref = (LLM_PROVIDER or "").strip()
+                DialogChain._logger.info(
+                    "LLM provider selection (dialog): provider_pref=%s openai=%s gemini=%s anthropic=%s",
+                    pref or "",
+                    bool(OPENAI_API_KEY),
+                    bool(GEMINI_API_KEY),
+                    bool(ANTHROPIC_API_KEY),
+                )
+                if pref == "openai" and OPENAI_API_KEY:
                     from langchain_openai import ChatOpenAI
-                    llm = ChatOpenAI(model=OPENAI_MODEL or "gpt-4o-mini", api_key=OPENAI_API_KEY, temperature=0.3)
+                    llm = ChatOpenAI(model=OPENAI_MODEL or "gpt-4o-mini", api_key=OPENAI_API_KEY, temperature=0.3, max_retries=0, timeout=30, model_kwargs={"response_format": {"type": "json_object"}})
+                    provider = "openai"
+                elif pref == "google" and GEMINI_API_KEY:
+                    from langchain_google_genai import ChatGoogleGenerativeAI
+                    llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL or "gemini-1.5-pro", api_key=GEMINI_API_KEY, temperature=0.3)
+                    provider = "gemini"
+                elif pref == "anthropic" and ANTHROPIC_API_KEY:
+                    from langchain_anthropic import ChatAnthropic
+                    llm = ChatAnthropic(model=ANTHROPIC_MODEL, api_key=ANTHROPIC_API_KEY, temperature=0.3)
+                    provider = "anthropic"
+                elif OPENAI_API_KEY:
+                    from langchain_openai import ChatOpenAI
+                    llm = ChatOpenAI(model=OPENAI_MODEL or "gpt-4o-mini", api_key=OPENAI_API_KEY, temperature=0.3, max_retries=0, timeout=30, model_kwargs={"response_format": {"type": "json_object"}})
                     provider = "openai"
                 elif GEMINI_API_KEY:
                     from langchain_google_genai import ChatGoogleGenerativeAI
                     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL or "gemini-1.5-pro", api_key=GEMINI_API_KEY, temperature=0.3)
                     provider = "gemini"
-            except Exception:
+                elif ANTHROPIC_API_KEY:
+                    from langchain_anthropic import ChatAnthropic
+                    llm = ChatAnthropic(model=ANTHROPIC_MODEL, api_key=ANTHROPIC_API_KEY, temperature=0.3)
+                    provider = "anthropic"
+            except Exception as e:
                 llm = None
+                try:
+                    DialogChain._logger.warning("Dialog LLM init error: %s", str(e), exc_info=True)
+                except Exception:
+                    pass
             from pydantic import BaseModel
 
             class DialogOut(BaseModel):
@@ -78,6 +112,7 @@ class DialogChain:
                     "Return strict JSON with fields: bot_message, next_question_id (or null), quick_replies (or null). "
                     "Use next_question_id like 'ask_age' or 'ask_field_of_study' matching these keys: full_name, age, academic_level, recent_grades, field_of_study, preferred_countries, english_tests, financial, career_goals, email, phone."
                     "\nRules: "
+                    "- ALWAYS provide quick_replies as an array of 3-5 relevant options when asking questions. Examples: ['Yes', 'No', 'Not sure'] or ['USA', 'UK', 'Canada', 'Germany'] or ['Bachelor's', 'Master's', 'PhD']"
                     "- Do NOT infer field_of_study from the degree (e.g., BS in AI). Ask explicitly unless the user clearly states their interest. If degree and field look same, ask a confirmation question and present options (e.g., AI, Computer Science, Engineering, Business). "
                     "- If user indicates 'not yet' for English tests, treat english_tests as completed for now and move forward to preferences or next missing field. "
                     "- Avoid re-asking any field listed in profile.completed_fields. "
@@ -94,9 +129,25 @@ class DialogChain:
                     elif provider == "gemini":
                         key_tail = GEMINI_API_KEY[-10:] if GEMINI_API_KEY else ""
                         DialogChain._logger.info("Using Gemini model=%s key_tail=%s", GEMINI_MODEL or "gemini-1.5-pro", key_tail)
+                    elif provider == "anthropic":
+                        DialogChain._logger.info("Using Anthropic model=%s", ANTHROPIC_MODEL)
                 except Exception:
                     pass
+            # Console print of provider and model for visibility
+            try:
+                selected_model = (
+                    (OPENAI_MODEL or "gpt-4o-mini") if provider == "openai" else (
+                    (GEMINI_MODEL or "gemini-1.5-pro") if provider == "gemini" else (
+                    ANTHROPIC_MODEL if provider == "anthropic" else "n/a"))
+                )
+                print(f"[LLM] dialog provider={provider or 'none'} model={selected_model}")
+            except Exception:
+                pass
             if llm is None:
+                DialogChain._logger.warning(
+                    "LLM provider not initialized (dialog) pref=%s openai=%s gemini=%s anthropic=%s",
+                    (LLM_PROVIDER or ""), bool(OPENAI_API_KEY), bool(GEMINI_API_KEY), bool(ANTHROPIC_API_KEY)
+                )
                 return None
             chain = prompt | llm | parser
             for _ in range(3):
@@ -129,6 +180,15 @@ class DialogChain:
                             DialogChain._logger.info("Dialog LLM raw output=%s", raw_out)
                         except Exception:
                             DialogChain._logger.info("Dialog LLM raw output (repr)=%r", out)
+                    if not next_question_id:
+                        # Force a clear next question using rules if LLM was generic
+                        fallback = DialogChain._find_next_missing_field(profile)
+                        if fallback:
+                            missing_key, question = fallback
+                            next_question_id = f"ask_{missing_key}"
+                            # If bot_message looks generic, replace it with the rule-based question
+                            if len((bot_message or "").strip()) < 20 or "assist you" in bot_message.lower():
+                                bot_message = question
                     if LOG_LLM_DEBUG:
                         DialogChain._logger.info("Dialog LLM success in %.1f ms: next=%s quick=%s", duration_ms, next_question_id, quick_replies[:3])
                     return bot_message, next_question_id, quick_replies

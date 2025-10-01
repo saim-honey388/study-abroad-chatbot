@@ -11,8 +11,7 @@ from app.models.academic_history import AcademicHistory
 from app.models.english_test import EnglishTest
 from app.models.study_preference import StudyPreference
 from app.utils.merge_utils import merge_profile
-from app.services.extractor import ExtractorChain
-from app.services.dialog import DialogChain
+from app.services.unified_single import UnifiedSingleCall, respond as unified_respond, _find_next_missing_field
 from app.services.document_processor import process_document
 from app.config import GEMINI_API_KEY, ENV, DEBUG
 
@@ -138,6 +137,19 @@ def _persist_extracted(db: Session, session_id, extracted: dict) -> None:
 
     db.flush()
 
+
+def _default_quick_replies_for(field_key: str) -> list[str]:
+    mapping = {
+        "academic_level": ["Matric", "Intermediate", "O/A Levels", "Bachelor's", "Master's"],
+        "recent_grades": ["3.5+ GPA", "3.0-3.5 GPA", "70-80%", "Don't remember"],
+        "field_of_study": ["Computer Science", "Data Science", "English", "Business", "Engineering"],
+        "preferred_countries": ["USA", "UK", "Canada", "Germany", "Australia"],
+        "english_tests": ["IELTS", "TOEFL", "PTE", "Not yet"],
+        "financial": ["Self-funded", "Scholarship", "Mixed", "Not sure yet"],
+        "target_level": ["Bachelor's", "Master's", "PhD"],
+    }
+    return mapping.get(field_key, [])
+
 class StartRequest(BaseModel):
     name: str
     phone: str
@@ -162,6 +174,7 @@ def start_chat(data: StartRequest, db: Session = Depends(get_db)):
     db.add(session)
     db.commit()
     db.refresh(session)
+    # Unified chat memory preloading removed
     return {"session_id": str(session.id), "bot_message": "Hi! Welcome to the Study Abroad Intake. Let's start with your current academic level."}
 
 
@@ -179,6 +192,12 @@ class MessageResponse(BaseModel):
 
 @router.post("/message", response_model=MessageResponse)
 def send_message(payload: MessageRequest, db: Session = Depends(get_db)):
+    import time
+    
+    # Start timing for this endpoint
+    endpoint_start = time.perf_counter()
+    print(f"🚀 Message endpoint started at {endpoint_start:.3f}s")
+    
     session = db.query(SessionModel).filter(SessionModel.id == payload.session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -187,42 +206,85 @@ def send_message(payload: MessageRequest, db: Session = Depends(get_db)):
     user_msg = Message(session_id=session.id, sender="user", text=payload.text, metadata_json={})
     db.add(user_msg)
     db.commit()
+    db_save_time = time.perf_counter()
+    print(f"💾 User message saved in {(db_save_time - endpoint_start) * 1000:.1f}ms")
 
-    # Determine the next missing field BEFORE extraction to guide LLM/rules
-    _, expected_question_id, _ = DialogChain.next_question(session.profile)
-    expected_field = None
-    if expected_question_id and expected_question_id.startswith("ask_"):
-        expected_field = expected_question_id.replace("ask_", "")
-
-    # Extract and merge
-    extracted_fields, _ = ExtractorChain.extract(
-        payload.text,
-        session.profile,
-        expected_field=expected_question_id.replace("ask_", "") if expected_question_id else None
-    )
-    updated_profile = merge_profile(session.profile, extracted_fields)
-    # Mark completed fields to prevent re-asking
+    # Unified single LLM call (dialog + extraction using only incomplete fields)
+    unified_start = time.perf_counter()
     try:
-        completed = set(updated_profile.get("completed_fields") or [])
+        # Use module-level function to avoid any class scope issues
+        bot_message, next_question_id, quick_replies, intake = unified_respond(
+            profile=session.profile,
+            text=payload.text,
+        )
+    except Exception as e:
+        try:
+            print("[/api/message] ERROR in UnifiedSingleCall.respond:", repr(e))
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
+    unified_time = time.perf_counter()
+    print(f"🧠 Unified single call in {(unified_time - unified_start) * 1000:.1f}ms")
+
+    # Merge intake fields into profile
+    extracted_fields = {k: v for k, v in (intake.dict(exclude_none=True)).items()}
+    prev_profile = session.profile or {}
+    updated_profile = merge_profile(prev_profile, extracted_fields)
+
+    # Mark completed fields to prevent re-asking (only true provided fields)
+    try:
+        # Preserve previously completed fields and add newly extracted ones
+        prev_completed = set((prev_profile or {}).get("completed_fields") or [])
+        completed = set(updated_profile.get("completed_fields") or []) | prev_completed
+        safe_keys = {
+            "full_name","age","email","phone","academic_level","recent_grades","institution",
+            "year_completed","major","field_of_study","preferred_countries","target_level",
+            "english_tests","financial","budget_min","budget_max","career_goals"
+        }
         for k, v in (extracted_fields or {}).items():
-            if v is not None and k not in ("english_tests",):
+            if k in safe_keys and v is not None:
                 completed.add(k)
-        # Special case: english_tests non-empty marks as completed
-        if isinstance(extracted_fields.get("english_tests"), list):
-            if len(extracted_fields["english_tests"]) > 0:
-                completed.add("english_tests")
+        if isinstance(extracted_fields.get("english_tests"), list) and len(extracted_fields["english_tests"]) > 0:
+            completed.add("english_tests")
+        completed.discard("completed_fields")
         updated_profile["completed_fields"] = list(completed)
     except Exception:
         pass
+
     session.profile = updated_profile
     db.add(session)
+
     # Persist normalized tables
     _persist_extracted(db, session.id, extracted_fields)
     db.commit()
     db.refresh(session)
 
-    # Dialog
-    bot_message, next_question_id, quick_replies = DialogChain.next_question(session.profile, last_user_message=payload.text, expected_field=expected_field)
+    # Dialog already produced by unified call; but if suggested question targets a now-completed field, advance
+    try:
+        if next_question_id:
+            target_field = str(next_question_id).replace("ask_", "")
+            completed = set(updated_profile.get("completed_fields") or [])
+            # Consider non-empty values as completed implicitly too
+            val = updated_profile.get(target_field)
+            def _is_empty(v):
+                if v is None: return True
+                if isinstance(v, str) and v.strip() == "": return True
+                if isinstance(v, (list, dict)) and len(v) == 0: return True
+                return False
+            if target_field in completed or not _is_empty(val):
+                fallback = _find_next_missing_field(updated_profile)
+                if fallback:
+                    missing_key, question = fallback
+                    next_question_id = f"ask_{missing_key}"
+                    bot_message = question
+                    # Only inject defaults if LLM provided none and the defaults semantically fit
+                    if not quick_replies:
+                        lower_msg = (bot_message or "").lower()
+                        # Avoid test-name defaults when the question asks for scores
+                        if not (missing_key == "english_tests" and ("score" in lower_msg or "band" in lower_msg)):
+                            quick_replies = _default_quick_replies_for(missing_key)
+    except Exception:
+        pass
 
     # Sanitize quick replies to be list[str] for response model compatibility
     sanitized_quick: list[str] = []
@@ -237,9 +299,21 @@ def send_message(payload: MessageRequest, db: Session = Depends(get_db)):
                 sanitized_quick.append(str(item))
 
     # Save bot message
+    bot_save_start = time.perf_counter()
     bot_msg = Message(session_id=session.id, sender="bot", text=bot_message, metadata_json={"next_question_id": next_question_id, "quick_replies": sanitized_quick})
     db.add(bot_msg)
     db.commit()
+    bot_save_time = time.perf_counter()
+    print(f"💾 Bot message saved in {(bot_save_time - bot_save_start) * 1000:.1f}ms")
+    
+    # Final timing summary
+    total_endpoint_time = (time.perf_counter() - endpoint_start) * 1000
+    print(f"🏁 TOTAL MESSAGE ENDPOINT TIME: {total_endpoint_time:.1f}ms")
+    print(f"   📊 Breakdown:")
+    print(f"      - DB save user: {(db_save_time - endpoint_start) * 1000:.1f}ms")
+    print(f"      - Unified single call: {(unified_time - unified_start) * 1000:.1f}ms")
+    print(f"      - DB save bot: {(bot_save_time - bot_save_start) * 1000:.1f}ms")
+    print("=" * 60)
 
     return MessageResponse(bot_message=bot_message, profile=session.profile, next_question_id=next_question_id, quick_replies=sanitized_quick)
 
